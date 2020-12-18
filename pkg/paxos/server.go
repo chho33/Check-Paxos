@@ -2,8 +2,6 @@ package paxos
 
 import (
 	"coms4113/hw5/pkg/base"
-    //"reflect"
-    //"fmt"
 )
 
 const (
@@ -26,8 +24,6 @@ type Proposer struct {
 
 	// in case node will propose again - restore initial value
 	InitialValue interface{}
-
-    findHighestN bool
 }
 
 type ServerAttribute struct {
@@ -65,7 +61,6 @@ func NewServer(peers []base.Address, me int, proposedValue interface{}) *Server 
 				InitialValue: proposedValue,
 				Responses:    response,
                 N_a_max: 0,
-                findHighestN: false,
 			},
 			timeout: &TimeoutTimer{},
 		},
@@ -81,16 +76,7 @@ func (newServer *Server) HandlePropReq(message base.Message) []base.Node {
     from := message.From()
     to := message.To()
 
-    //fmt.Println("message.(*ProposeRequest).N: ", message.(*ProposeRequest).N)
-    //fmt.Println("server.acceptor before: ")
-    newServer.PrintAcceptor()
-
-    if (message.(*ProposeRequest).SessionId < newServer.proposer.SessionId) {
-      return []base.Node{}
-    }
-
     if message.(*ProposeRequest).N <= newServer.n_p {
-      //fmt.Println("not Ok: N <= server.n_p ")
       result := &ProposeResponse {
         CoreMessage: base.MakeCoreMessage(to, from),
         Ok:          false,
@@ -105,21 +91,10 @@ func (newServer *Server) HandlePropReq(message base.Message) []base.Node {
       return []base.Node{newServer}
     }
 
-    // add
-    //if newServer.proposer.SuccessCount > 1 {
-    //  return []base.Node{newServer}
-    //}
-
-    //v := newServer.proposer.InitialValue
-    // as an aceptor
     v_a := newServer.v_a
     n_a := newServer.n_a
-    // already reject message.(*ProposeRequest).N < newServer.n_p
-    // opdate self n_p to prevent other smaller n_p request
     newServer.n_p = message.(*ProposeRequest).N
 
-    //fmt.Println("server.acceptor before: ")
-    newServer.PrintAcceptor()
 
     result := &ProposeResponse {
       CoreMessage: base.MakeCoreMessage(to, from),
@@ -129,17 +104,10 @@ func (newServer *Server) HandlePropReq(message base.Message) []base.Node {
       V_a:         v_a, //nil for 1,2; v1 for 0
       SessionId:   message.(*ProposeRequest).SessionId,
     }
-    //fmt.Println("response: ", result)
-    //fmt.Println("-----------------------------------")
 
     newServer.Response = []base.Message{
       result,
     }
-
-    // as an proposer
-    //if n_a > newServer.proposer.N_a_max {
-    //  newServer.proposer.N_a_max = n_a
-    //}
 
     newServer.proposer.Responses = []bool{false, false, false}
     return []base.Node{newServer}
@@ -148,16 +116,12 @@ func (newServer *Server) HandlePropReq(message base.Message) []base.Node {
 func (newServer *Server) HandlePropRes(message base.Message) []base.Node {
     from := message.From()
 
-    //fmt.Println("server.proposer before: " )
-    newServer.PrintProposer()
-
     // examine SessionId 
     newServer.proposer.ResponseCount++
-    if message.(*ProposeResponse).SessionId < newServer.proposer.SessionId {
+    if message.(*ProposeResponse).SessionId != newServer.proposer.SessionId {
       return []base.Node{}
     }
 
-    //fmt.Println("message.(*ProposeResponse).Ok: ", message.(*ProposeResponse).Ok)
     // examine Ok
     if !message.(*ProposeResponse).Ok {
       // Resp N_p bigger;
@@ -196,56 +160,40 @@ func (newServer *Server) HandlePropRes(message base.Message) []base.Node {
     newServer.proposer.Responses[index] = true
     newServer.proposer.V = v
 
-    response := []base.Node{newServer}
     if newServer.proposer.SuccessCount< 2 {
-        return response
+        return []base.Node{newServer}
     }
 
-    //fmt.Println("server.proposer after: " )
-    newServer.PrintProposer()
-
     n_p := newServer.proposer.N
-    //if message.(*ProposeResponse).N_p > n_p {
-    //  n_p = message.(*ProposeResponse).N_p
-    //  newServer.proposer.N = n_p
-    //}
-
     anotherServer := newServer.copy()
     anotherServer.Response = []base.Message{
       &AcceptRequest {
-        CoreMessage: base.MakeCoreMessage(newServer.peers[0], newServer.peers[0]),
+        CoreMessage: base.MakeCoreMessage(newServer.peers[newServer.me], newServer.peers[0]),
         N:           n_p,
         V:           v,
-        SessionId:   message.(*ProposeResponse).SessionId,
+        SessionId:   newServer.proposer.SessionId,
       },
       &AcceptRequest {
-        CoreMessage: base.MakeCoreMessage(newServer.peers[0], newServer.peers[1]),
+        CoreMessage: base.MakeCoreMessage(newServer.peers[newServer.me], newServer.peers[1]),
         N:           n_p,
         V:           v,
-        SessionId:   message.(*ProposeResponse).SessionId,
+        SessionId:   newServer.proposer.SessionId,
       },
       &AcceptRequest {
-        CoreMessage: base.MakeCoreMessage(newServer.peers[0], newServer.peers[2]),
+        CoreMessage: base.MakeCoreMessage(newServer.peers[newServer.me], newServer.peers[2]),
         N:           n_p,
         V:           v,
-        SessionId:   message.(*ProposeResponse).SessionId,
+        SessionId:   newServer.proposer.SessionId,
       },
     }
-    //fmt.Println("responses: ", anotherServer.Response)
 
-    //anotherServer.me = 0
-    //anotherServer.n_p = n_p
     anotherServer.proposer.V = v
     anotherServer.proposer.Phase = Accept
     anotherServer.proposer.ResponseCount = 0
     anotherServer.proposer.SuccessCount = 0
     anotherServer.proposer.Responses = []bool{false, false, false}
 
-    //fmt.Println("anotherserver.proposer: " )
-    anotherServer.PrintProposer()
-    //fmt.Println("-----------------------------------")
-
-    response = append(response, anotherServer)
+    response := []base.Node{anotherServer, newServer}
 
     return response
 }
@@ -253,13 +201,6 @@ func (newServer *Server) HandlePropRes(message base.Message) []base.Node {
 func (newServer *Server) HandleAcptReq(message base.Message) []base.Node {
     from := message.From()
     to := message.To()
-
-    //fmt.Println("message.(*AcceptRequest).N: ", message.(*AcceptRequest).N)
-    //fmt.Println("server.acceptor before: ")
-    newServer.PrintAcceptor()
-    if (message.(*AcceptRequest).SessionId < newServer.proposer.SessionId) {
-      return []base.Node{}
-    }
 
     if message.(*AcceptRequest).N < newServer.n_p {
       result := &AcceptResponse {
@@ -277,17 +218,12 @@ func (newServer *Server) HandleAcptReq(message base.Message) []base.Node {
     newServer.n_a = message.(*AcceptRequest).N
     newServer.v_a = message.(*AcceptRequest).V
 
-    //fmt.Println("server.acceptor after: ")
-    newServer.PrintAcceptor()
-
     result := &AcceptResponse {
       CoreMessage: base.MakeCoreMessage(to, from),
       Ok:          true,
       N_p:         newServer.n_p,
       SessionId:   message.(*AcceptRequest).SessionId,
     }
-    //fmt.Println("response: ", result)
-    //fmt.Println("-----------------------------------")
 
     newServer.Response = []base.Message{
       result,
@@ -298,21 +234,15 @@ func (newServer *Server) HandleAcptReq(message base.Message) []base.Node {
 func (newServer *Server) HandleAcptRes(message base.Message) []base.Node {
     from := message.From()
 
-    //fmt.Println("server.proposer before: " )
-    newServer.PrintProposer()
-
     newServer.proposer.ResponseCount++
-    if message.(*AcceptResponse).SessionId < newServer.proposer.SessionId {
+    if message.(*AcceptResponse).SessionId != newServer.proposer.SessionId {
       return []base.Node{}
     }
 
-    //fmt.Println("message.(*AcceptResponse).Ok: ", message.(*AcceptResponse).Ok)
     if !message.(*AcceptResponse).Ok {
       return []base.Node{newServer}
     }
     newServer.proposer.SuccessCount++
-
-    //[Error] newServer.proposer.N_a_max = message.(*AcceptResponse).N_p
 
     if len(newServer.proposer.Responses)==0 {
       newServer.proposer.Responses = []bool{false, false, false}
@@ -326,33 +256,26 @@ func (newServer *Server) HandleAcptRes(message base.Message) []base.Node {
     }
 
     v := newServer.proposer.V
-    if newServer.proposer.findHighestN {
-      v = newServer.v_a
-    }
-    //fmt.Println("server.proposer after: " )
-    newServer.PrintProposer()
 
     anotherServer := newServer.copy()
     anotherServer.Response = []base.Message{
       &DecideRequest {
-        CoreMessage: base.MakeCoreMessage(newServer.peers[0], newServer.peers[0]),
+        CoreMessage: base.MakeCoreMessage(newServer.peers[newServer.me], newServer.peers[0]),
         V:           v,
         SessionId:   message.(*AcceptResponse).SessionId,
       },
       &DecideRequest {
-        CoreMessage: base.MakeCoreMessage(newServer.peers[0], newServer.peers[1]),
+        CoreMessage: base.MakeCoreMessage(newServer.peers[newServer.me], newServer.peers[1]),
         V:           v,
         SessionId:   message.(*AcceptResponse).SessionId,
       },
       &DecideRequest{
-        CoreMessage: base.MakeCoreMessage(newServer.peers[0], newServer.peers[2]),
+        CoreMessage: base.MakeCoreMessage(newServer.peers[newServer.me], newServer.peers[2]),
         V:           v,
         SessionId:   message.(*AcceptResponse).SessionId,
       },
     }
-    //fmt.Println("response: ", anotherServer.Response)
 
-    // add
     anotherServer.agreedValue = v
 
     anotherServer.proposer = Proposer {
@@ -363,13 +286,9 @@ func (newServer *Server) HandleAcptRes(message base.Message) []base.Node {
       InitialValue: newServer.proposer.InitialValue,
       Responses:    []bool{false, false, false},
       N_a_max: newServer.proposer.N_a_max,
-      findHighestN: newServer.proposer.findHighestN,
       ResponseCount: 0,
       SuccessCount: 0,
     }
-    //fmt.Println("anotherserver.proposer: " )
-    anotherServer.PrintProposer()
-    //fmt.Println("-----------------------------------")
 
     return []base.Node{anotherServer, response[0]}
 }
@@ -392,8 +311,6 @@ func (server *Server) MessageHandler(message base.Message) []base.Node {
     }
 
     // This happens in NextState 
-    //fmt.Println("from: ", from, "to: ", to)
-    //fmt.Println("message: ", message, reflect.TypeOf(message).String())
 
     _, propReq := message.(*ProposeRequest)
     if propReq {
@@ -417,9 +334,6 @@ func (server *Server) MessageHandler(message base.Message) []base.Node {
 
     _, decReq := message.(*DecideRequest)
     if decReq {
-      if (message.(*DecideRequest).SessionId < newServer.proposer.SessionId) {
-        return []base.Node{}
-      }
       newServer.agreedValue = message.(*DecideRequest).V
       newServer.Response = []base.Message {
         &DecideResponse {
@@ -470,6 +384,12 @@ func (server *Server) StartPropose() {
         },
     }
 
+	response := make([]bool, len(server.peers))
+    server.proposer =  Proposer {
+		InitialValue: server.proposer.InitialValue,
+		Responses:    response,
+        N_a_max: 0,
+	}
     server.proposer.N = n
     server.proposer.SessionId = sessionid
     //server.proposer.V = server.peers[server.me]
@@ -480,9 +400,9 @@ func (server *Server) StartPropose() {
         server.proposer.V = server.agreedValue
     }
     server.proposer.Phase = Propose
-	server.proposer.SuccessCount = 0
-	server.proposer.ResponseCount = 0
-    server.proposer.Responses = []bool{false, false, false}
+	//server.proposer.SuccessCount = 0
+	//server.proposer.ResponseCount = 0
+    //server.proposer.Responses = []bool{false, false, false}
 }
 
 // Returns a deep copy of server node
@@ -581,30 +501,4 @@ func (server *Server) Address() base.Address {
 
 func (server *Server) GetProposer() Proposer {
 	return server.proposer
-}
-
-func (server *Server) PrintProposer() {
-    //fmt.Println("--")
-    //proposer := server.proposer
-    //fmt.Println("me: ", server.me+1)
-    //fmt.Println("SessoinId: ", proposer.SessionId)
-    //fmt.Println("Phase: ", proposer.Phase)
-    //fmt.Println("N: ", proposer.N)
-    //fmt.Println("N_a_max: ", proposer.N_a_max)
-    //fmt.Println("V: ", proposer.V)
-    //fmt.Println("ResponseCount: ", proposer.ResponseCount)
-    //fmt.Println("SuccessCount: ", proposer.SuccessCount)
-    //fmt.Println("Responses: ", proposer.Responses)
-    //fmt.Println("InitialValue: ", proposer.InitialValue)
-    //fmt.Println("--")
-}
-
-func (server *Server) PrintAcceptor() {
-    //fmt.Println("--")
-    //fmt.Println("me: ", server.me+1)
-    //fmt.Println("n_p: ", server.n_p)
-    //fmt.Println("n_a: ", server.n_a)
-    //fmt.Println("v_a: ", server.v_a)
-    //fmt.Println("agreedValue: ", server.agreedValue)
-    //fmt.Println("--")
 }

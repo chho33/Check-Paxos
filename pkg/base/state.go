@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 	"math/rand"
-    //"fmt"
 )
 
 type State struct {
@@ -201,7 +200,6 @@ func (s *State) HandleMessage(index int, deleteMessage bool) (result []*State) {
 
     nodes := s.nodes[arrive].MessageHandler(message)
     for _, node := range(nodes) {
-      //fmt.Println("node.Response: ", node)
       var newState *State
 
       if s.isDuplicate {
@@ -212,9 +210,8 @@ func (s *State) HandleMessage(index int, deleteMessage bool) (result []*State) {
 
       //newState.nodes[arrive] = node
       newState.UpdateNode(arrive, node)
-      resp := node.HandlerResponse()
-      //fmt.Println("network resp: ", resp)
-      newState.Receive(resp)
+      //resp := node.HandlerResponse()
+      //newState.Receive(resp)
       if deleteMessage {
           newState.DeleteMessage(index)
       }
@@ -312,7 +309,8 @@ func (s *State) TriggerNodeTimer(address Address, node Node) []*State {
       newState := s.Inherit(TriggerEvent("client", nil))
       //newState.nodes["client"] = node
       newState.UpdateNode(address, node)
-      newState.Receive(node.HandlerResponse())
+      //newState.Receive(node.HandlerResponse())
+      if newState.Equals(s) {continue}
       states = append(states, newState)
     }
     return states
