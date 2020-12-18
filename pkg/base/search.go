@@ -44,12 +44,34 @@ func BfsFind(initState *State, validate, goalPredicate func(*State) bool, limitD
 
 	result.N = 0
 
+    //tmp := 0
 	for queue.Len() > 0 {
 		v := queue.Remove(queue.Front())
 		state := v.(*State)
 		result.N++
+        ////fmt.Println("Depth: ", state.Depth)
+        ////fmt.Println("N: ", result.N)
+
+        tmp := 0
+        if (state.Depth>tmp) {
+          //fmt.Println("===========================")
+          //fmt.Println("Depth: ", state.Depth,", N: ", result.N)
+          //fmt.Println("===========================")
+          tmp = state.Depth
+        }
+
+        //if (state.Depth == 8) {
+        //    return
+        //}
+        //fmt.Println("Event: ", state.Event)
+        ////fmt.Println("prev state: ", state.Prev)
+        //fmt.Println("state: ", state)
+        //server := state.GetNode("s3")
+        ////fmt.Println("s3: ", server)
+        ////fmt.Println("-------------------")
 
 		if goalPredicate(state) {
+            //fmt.Println("succees???: ", state.Event)
 			result.Success = true
 			result.Targets = []*State{state}
 			return
@@ -99,10 +121,18 @@ func BfsFindAll(initState *State, validate, goalPredicate func(*State) bool, dep
 
 	result.N = 0
 
+    tmp := 0
 	for queue.Len() > 0 {
 		v := queue.Remove(queue.Front())
 		state := v.(*State)
 		result.N++
+
+        if (state.Depth>tmp) {
+          //fmt.Println("===========================")
+          //fmt.Println("Depth: ", state.Depth,", N: ", result.N)
+          //fmt.Println("===========================")
+          tmp = state.Depth
+        }
 
 		if goalPredicate != nil && goalPredicate(state) {
 			result.Targets = append(result.Targets, state)

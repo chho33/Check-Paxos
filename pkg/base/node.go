@@ -1,4 +1,5 @@
 package base
+//import "fmt"
 
 // An interface to represent a node in a distributed system.
 // A node is treated as an immutable object in a state. Every time a node is to be modified,
@@ -49,6 +50,7 @@ type CoreNode struct {
 
 func (node *CoreNode) HandlerResponse() []Message {
 	res := node.Response
+    //if len(res) > 0 {fmt.Println("res: ", res, res[0])} else {fmt.Println("res: ", res)}
 	node.Response = nil
 	return res
 }
